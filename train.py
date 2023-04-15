@@ -1,6 +1,44 @@
+import os
+
 import torch
 from torch import nn
 from torch.optim import Adam
+from torchvision.io import read_image
+from torchvision.models import resnet50, ResNet50_Weights
+
+from networks import ConvClassifier
+
+
+def train_epoch(model, data, optimizer, loss_fn, device):
+    """
+    Trains a given model for one epoch
+
+    Args:
+        model: the model being trained
+        data: a DataLoader containing the training data
+        optimizer: the optimizer training the model's parameters
+        loss_fn: a function to compute the loss to be minimized
+
+    Returns:
+        Nothing
+    
+    """
+    if not model.training:
+        model.train()
+
+    for batch, (X, y) in enumerate(data):
+        X, y = X.to(device), y.to(device)
+        pred = model(X)
+        loss = loss_fn(pred, y)
+
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+        if batch % 100 == 0:
+            loss, current = loss.item(), batch * len(X)
+            print(f"train loss: {loss:>7f}  [{current:>7d}/{len(data.dataset):>7d}]")
+            
 
 def trainUNet(names: list[str], epochs: int, starting_epoch: int, lipschitz: bool):
 
@@ -30,4 +68,41 @@ def trainUNet(names: list[str], epochs: int, starting_epoch: int, lipschitz: boo
         eval_loop(model, test_dataloader, loss_fn)
         if (t+1) % 5 == 0:
             torch.save(model.state_dict(), os.path.join("data", "models", f"{filename}_{starting_epoch+t+1}.pth"))
+
+
+def train_copycat():
     
+    # Hyperparameters
+    epochs = 50
+    learning_rate = 1e-3
+    batch_size = 512
+    weight_decay = 1e-2
+    
+    # Model Definition
+    model = ConvClassifier(3, 1000)
+    optimizer = Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
+
+    # Loss Function
+    loss_fn = nn.CrossEntropyLoss()
+
+    # Initialize Pretrained ResNet Model
+    weights = ResNet50_Weights.DEFAULT
+    model = resnet50(weights=weights)
+    model.eval()
+
+    # Load & Preprocess Data
+    preprocess = weights.transforms()
+
+    prediction = model(batch).softmax(dim=-1)
+    class_ids = prediction.argmax(dim=-1)
+    resnet_labels = nn.functional.one_hot(class_ids, num_classes=1000)
+
+    # Training
+    for e in range(epochs):
+        train_epoch(model, train_dataloader, optimizer, loss_fn)
+        if (e+1) % 5 == 0:
+            torch.save(model.state_dict(), os.path.join("data", "models", f"copycat_{e+1}.pth"))
+
+
+
+
