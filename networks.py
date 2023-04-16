@@ -3,6 +3,46 @@ from torch import nn
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
+# Using this for guidance. I think it has a nice way of doing things...our depth should definitely be flexible
+# https://towardsdatascience.com/creating-and-training-a-u-net-model-with-pytorch-for-2d-3d-semantic-segmentation-model-building-6ab09d6a0862
+
+class ConcatLayer(nn.Module):
+    def __init__(self):
+        super(ConcatLayer, self).__init__()
+    
+    def forward(self, layer1, layer2):
+        return torch.cat((layer1, layer2), 1)
+
+class DownBlock(nn.Module):
+    """
+    Convolution -> BatchNorm2d -> ReLU
+    """
+    
+    def __init__(self, in_channels: int, out_channels: int,
+                #  pooling: bool = True,
+                #  normalization: str = None,
+                #  dim: str = 2,
+                #  conv_mode: str = 'same'
+                 ):
+        super.__init__()
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        # self.pooling = pooling
+        # self.normalization = normalization
+        self.padding = 1
+        # self.dim = dim
+        
+        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=1, padding=self.padding, bias=True)
+        self.normalization = nn.BatchNorm2d(out_channels)
+        self.activation = nn.ReLU()
+    
+    def forward(self, x):
+        mid = self.conv(x)
+
+
+
+        
+
 class UNet(nn.Module):
     """
     Basic U-Net Architecture.
