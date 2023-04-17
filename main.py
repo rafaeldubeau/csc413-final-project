@@ -25,14 +25,9 @@ def test_pretrained():
 
     prediction = model(batch).squeeze(0).softmax(0)
     class_id = prediction.argmax().item()
-    for id in class_ids:
-        item = id.item()
-        score = prediction[item].item()
-        category_name = weights.meta["categories"][class_id]
-        print(f"{category_name}: {100 * score:.1f}%")
-    # score = prediction[class_id].item()
-    # category_name = weights.meta["categories"][class_id]
-    # print(f"{category_name}: {100 * score:.1f}%")
+    score = prediction[class_id].item()
+    category_name = weights.meta["categories"][class_id]
+    print(f"{category_name}: {100 * score:.1f}%")
 
 
 

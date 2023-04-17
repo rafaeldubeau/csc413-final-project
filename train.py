@@ -16,6 +16,7 @@ from torch.utils.data import Dataset, DataLoader
 import matplotlib.pyplot as plt
 
 from networks import ConvClassifier
+import gtsrb_utils
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -58,17 +59,15 @@ def trainUNet(epochs: int, starting_epoch: int):
 
     # Load model and set weights
     from networks import Net
-    weights = torch.load('pretrained/gtsrb-pytorch-master/model/model_40.pth')
-    compareModel = Net()
-    compareModel.load_state_dict(weights)
-    compareModel.eval() # Not sure what this does or if its necessary
+    compareModel = gtsrb_utils.load_pretrained()
 
     from networks import UNet
     model = UNet()
+    # def __init__(self, convKernel, num_in_channels, num_filters, num_colours):
+
 
     # Load dataset
-    dataset = datasets.GTSRB(root= "./model", download=True, transform=transforms.ToTensor())
-    data_loader = torch.utils.data.DataLoader(dataset, shuffle=True)
+    data_loader = gtsrb_utils.load_gtsrb_dataloader()
 
     # Loss functions
     base_loss = nn.MSELoss()
