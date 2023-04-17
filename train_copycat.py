@@ -102,7 +102,7 @@ def evaluate(model, data, loss_fn, device):
             pred = model(X)
             loss += loss_fn(pred, y).item()
             
-            acc += torch.count_nonzero(y.argmax(dim=-1) == pred.argmax(dim=-1))
+            acc += torch.count_nonzero(y == pred.argmax(dim=-1))
     
     loss = loss / (len(data.dataset) / batch_size)
     acc = acc / len(data.dataset)
