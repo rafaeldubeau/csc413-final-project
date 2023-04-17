@@ -113,7 +113,7 @@ class Conv2dBlock(nn.Module):
         return self.block(x)
 
 
-class ConvClassifier(nn.module):
+class ConvClassifier(nn.Module):
     def __init__(self, in_channels: int, out_dim: int, num_filters: int = 32, kernel_size: int = 3, num_hidden: int=3):
         super(ConvClassifier, self).__init__()
         

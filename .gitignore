@@ -1,2 +1,3 @@
 data/gtsrb/**
 model/gtsrb
+__pycache__
