@@ -1,7 +1,15 @@
 import os
+import numpy as np
 
+import torch
+import torchvision
+from torch.utils.data import Dataset, DataLoader
+from torchvision import datasets
+from torchvision import transforms as transforms
 from torchvision.io import read_image
 from torchvision.models import resnet50, ResNet50_Weights
+
+import matplotlib.pyplot as plt
 
 
 def test_pretrained():
@@ -23,4 +31,7 @@ def test_pretrained():
 
 
 if __name__ == "__main__":
+    dataset = datasets.GTSRB(root= "./model", download=True, transform=transforms.ToTensor())
+    data_loader = torch.utils.data.DataLoader(dataset, shuffle=True)
+
     test_pretrained()
