@@ -25,48 +25,14 @@ def test_pretrained():
 
     prediction = model(batch).squeeze(0).softmax(0)
     class_id = prediction.argmax().item()
-    for id in class_ids:
-        item = id.item()
-        score = prediction[item].item()
-        category_name = weights.meta["categories"][class_id]
-        print(f"{category_name}: {100 * score:.1f}%")
-    # score = prediction[class_id].item()
-    # category_name = weights.meta["categories"][class_id]
-    # print(f"{category_name}: {100 * score:.1f}%")
-
-def external_test():
-    dataset = torchvision.datasets.GTSRB(root= "./model", download=True, transform=transforms.ToTensor())
-    data_loader = torch.utils.data.DataLoader(dataset, shuffle=True)
-
-    # train_features, train_labels = next(iter(data_loader))
-    # while (train_features is not None):
-    #     train_features, train_labels = next(iter(data_loader))
-    #     print(f"Feature batch shape: {train_features.size()}")
-    #     print(f"Labels batch shape: {train_labels.size()}")
-    #     img = train_features[0].squeeze()
-    #     label = train_labels[0]
-    #     plt.imshow(img[0], cmap="gray")
-    #     plt.show()
-    #     print(f"Label: {label}")
-
-    weights = torch.load('pretrained/gtsrb-pytorch-master/model/model_40.pth')
-    from networks import Net
-    model = Net()
-    model.eval()
-    model.load_state_dict(weights)
-    # print(model.bn1.weight.data)
-    print(list(weights.items())[0])
-    # model.bn1.weight.data = weights
-    # print(model.bn1.weight.data)
-
-    # model = GTSRB(weights=weights)
-    # # print(model)
-    # model.eval()
+    score = prediction[class_id].item()
+    category_name = weights.meta["categories"][class_id]
+    print(f"{category_name}: {100 * score:.1f}%")
 
 
 
 if __name__ == "__main__":
-    dataset = datasets.GTSRB(root= "./model", download=True, transform=transforms.ToTensor())
-    data_loader = torch.utils.data.DataLoader(dataset, shuffle=True)
+    from train import trainUNet
+    trainUNet(10, 0)
 
     test_pretrained()

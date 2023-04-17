@@ -16,7 +16,9 @@ from torch.utils.data import Dataset, DataLoader
 import matplotlib.pyplot as plt
 
 from networks import ConvClassifier
+import gtsrb_utils
 
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 def train_epoch(model, data, optimizer, loss_fn, device):
     """
@@ -49,34 +51,41 @@ def train_epoch(model, data, optimizer, loss_fn, device):
             print(f"train loss: {loss:>7f}  [{current:>7d}/{len(data.dataset):>7d}]")
             
 
-def trainUNet(names: list[str], epochs: int, starting_epoch: int, lipschitz: bool):
+def trainUNet(epochs: int, starting_epoch: int):
     # Hyperparameters
     learning_rate = 10e-4
     batch_size = 512
     alpha = 10e-6
 
-    # Load dataset
-    dataset = datasets.GTSRB(root= "./model", download=True, transform=transforms.ToTensor())
-    data_loader = torch.utils.data.DataLoader(dataset, shuffle=True)
+    # Load model and set weights
+    from networks import Net
+    compareModel = gtsrb_utils.load_pretrained()
 
-    # Loss function.
+    from networks import UNet
+    model = UNet()
+    # def __init__(self, convKernel, num_in_channels, num_filters, num_colours):
+
+
+    # Load dataset
+    data_loader = gtsrb_utils.load_gtsrb_dataloader()
+
+    # Loss functions
     base_loss = nn.MSELoss()
     
+    # TODO: Make this more involved.
     def UNetLoss(input, target):
-        pass
+        print('compareModel')
+        return base_loss(input, target)
 
-    # loss_fn = lambda pred, y, model: base_loss(pred.squeeze(), y.squeeze()) + alpha * model.get_lipschitz_bound()
-
+    # Optimizer
     optimizer = Adam(model.parameters(), lr=learning_rate)
 
     # Train loop
     for t in range(epochs):
         print(f"Epoch {t+1}\n-------------------------------")
-        train_epoch(model, )
-        train_loop(model, train_dataloader, optimizer, loss_fn)
-        eval_loop(model, test_dataloader, loss_fn)
+        train_epoch(model, data_loader, optimizer, UNetLoss, device)
         if (t+1) % 5 == 0:
-            torch.save(model.state_dict(), os.path.join("data", "models", f"{filename}_{starting_epoch+t+1}.pth"))
+            torch.save(model.state_dict(), os.path.join("data", "models", f"UNetTrain_{starting_epoch+t+1}.pth"))
 
 
 def train_copycat():
