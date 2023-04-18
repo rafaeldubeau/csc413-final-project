@@ -59,13 +59,28 @@ label_map = {
     42: 'lifted_no_overtaking_trucks'
 }
 
+mean = (0.3337, 0.3064, 0.3171)
+std = (0.2672, 0.2564, 0.2629)
+
+def normalizeParams():
+    return mean, std
+
+def inverseNormalizeMean():
+    return tuple(-mean[i]/std[i] for i in range(len(mean)))
+
+def inverseNormalizeStd():
+    return tuple(1/std[i] for i in range(len(std)))
+
 # Resize all images to 32 * 32 and normalize them to mean = 0 and standard-deviation = 1 based on statistics collected from the training set
 data_transforms = transforms.Compose([
     transforms.Resize((32, 32)),
     transforms.ToTensor(),
-    transforms.Normalize((0.3337, 0.3064, 0.3171), ( 0.2672, 0.2564, 0.2629))
+    transforms.Normalize(mean, std)
     ])
 
+inverse_transforms = transforms.Compose([
+    transforms.Normalize(inverseNormalizeMean(), inverseNormalizeStd())
+    ])
 
 def load_pretrained() -> Net:
     model = Net()
