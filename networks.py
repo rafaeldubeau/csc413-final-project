@@ -14,23 +14,17 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 class DownBlock(nn.Module):
     def __init__(self, inChannels, outChannels):
         super().__init__()
-		# store the convolution and RELU layers
-        # print("In Channels: ", inChannels, " Out Channels: ", outChannels)
         self.conv1 = torch.nn.Conv2d(inChannels, outChannels, kernel_size=3, padding="same")
         self.batchNorm = torch.nn.BatchNorm2d(outChannels)
         self.ReLU = torch.nn.ReLU()
-        # torch.nn.BatchNorm2d(out_channels),
-        # torch.nn.ReLU(),
-        # torch.nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
 
     def forward(self, x):
         # apply CONV => RELU => CONV block to the inputs and return it
         y = self.conv1(x)
-        # print("\t y shape (conv):\t", y.shape)
         y = self.batchNorm(y)
         y = self.ReLU(y)
         return y
-        # return self.sequence(x)
+
 
 class Encoder(nn.Module):
     def __init__(self, channels=(3, 16, 32, 64, 128)):
@@ -42,9 +36,7 @@ class Encoder(nn.Module):
     def forward(self, x):
         blockOutputs = []
         for block in self.encodeBlocks:
-            # print("\t Initial x shape:\t", x.shape)
             x = block(x)
-            # print("\t New x shape:\t", x.shape)
             blockOutputs.append(x)
             x = self.pool(x)
         return blockOutputs
@@ -63,28 +55,20 @@ class Decoder(nn.Module):
     
     def forward(self, encodedFeatures):
         x = encodedFeatures[-1]
-        # loop through the number of channels
-        # print("PASSING X THROUGH DECODER")
         for i in range(len(self.channels) - 2):
-            # print("ITERATION ", i)
 			# Pass the inputs through upsampler block.
-            # print("\t Initial x shape:\t", x.shape)
             y = self.upconvs[i](x)
-            # print("\t y shape (upconved):\t", y.shape)
-            # print("\t encoded[i] shape:\t", encodedFeatures[-(i+2)].shape)
 			# Crop current features from encoder blocks, concatenate with the current upsampled features.
-            # encFeat = self.crop(encodedFeatures[i], x)
             y = torch.cat([y, encodedFeatures[-(i+2)]], dim=1)
-            # print("\ty shape post-concat:\t", y.shape)
 			# Pass the concatenated output through the current decoder block.
             x = self.decodeBlocks[i](y)
-            # print("\tFinal x shape:", x.shape, "\n")
 
         # Apply last block (no upsampling or concatenation)
         x = self.decodeBlocks[-1](x)
 
         # Apply last layer (no nonlinearity)
         x = self.out_layer(x)
+
         return x
 
 class UNet(nn.Module):
@@ -94,37 +78,20 @@ class UNet(nn.Module):
     Old version was I think needlyless complicated!
     """
 
-    def __init__(self, encodeChannels=(3, 16, 32, 64, 128), decodeChannels=(128, 64, 32, 16, 3),
-                 numClasses=1, retainDimension=True, outSize=(32, 32)):
+    def __init__(self, channels=(3, 16, 32, 64, 128)):
         super().__init__()
+        decodeChannels = channels[::-1]
         # Initialize Encoder and Decoder
-        self.encoder = Encoder(encodeChannels)
+        self.encoder = Encoder(channels)
         self.decoder = Decoder(decodeChannels)
-            # BELOW: from the version of this that's segmentation-oriented.
-        # self.head = nn.Conv2d(decodeChannels[-1], numClasses, 1)
-        # self.retainDimension = retainDimension
-        # self.outSize = outSize
 
     def forward(self, x):
         encodedFeatures = self.encoder(x)
-        # print("ENCODER FEATURES GENERATED:")
-        # for i in range(len(encodedFeatures)):
-        #     print("\t ",i , encodedFeatures[i].shape)
-        
         # Pass encoder features through decoder, making sure dimensions are suited for concatenation
         # The first one is the final output (bottom of the U), and the rest are the features to work with
-        decodedFeatures = self.decoder(encodedFeatures)
+        output = self.decoder(encodedFeatures)
         
-        return decodedFeatures # Despite the plural, this is just one item.
-
-            # BELOW: from the version of this that's segmentation-oriented.
-        # # Pass  decoder features through regression head, obtain the segmentation mask
-        # map = self.head(decodedFeatures)
-
-        # # If we are retaining the original output dimensions then resize the output to match them
-        # if self.retainDimension:
-        #     map = F.interpolate(map, self.outSize)
-        # return map
+        return output 
     
 
 class Conv2dBlock(nn.Module):

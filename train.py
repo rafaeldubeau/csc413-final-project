@@ -1,55 +1,111 @@
 import os
+import random
 import numpy as np
 
 import torch
 import torchvision
 from torch import nn
 from torch.optim import Adam
-from torchvision.io import read_image
-from torchvision.models import resnet50, ResNet50_Weights
-from torchvision import datasets
 from torchvision import transforms as transforms
-from torchvision.io import read_image
-from torch.utils.data import Dataset, DataLoader
-import torch.nn.functional as F
+from torch.utils.data import DataLoader
+
+from gtsrb_utils import label_map
 
 from networks import UNet
 
-from fgsm import fgsm_attack
-
 import matplotlib.pyplot as plt
 
-from networks import ConvClassifier
 import gtsrb_utils
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     
 # LOSS FUNCTION ZONE!
 
-# L(new image) = MSELoss(original image, new image) - MisclassificationMetric(correct label, new label)
-def UNetLoss(originalImage, newImage, actualLabel, adversaryNetwork):
-    imageComparison = nn.MSELoss()
-    imageLoss = imageComparison(originalImage, newImage)
+def UNetLoss_simple(originalImage, newImage, gtLabel, adversaryNetwork, beta=5):
+    L_x = nn.functional.mse_loss(originalImage, newImage)
 
-    labelComparison = nn.MSELoss()
-    # Find generatedLabel by actually running it through our adversaryNetwork.
-    generatedLabel = adversaryNetwork(newImage)
-    misclassificationLoss = labelComparison(actualLabel, generatedLabel)
+    pred = nn.functional.softmax(adversaryNetwork(newImage), dim=-1) # Tensor of size batch_size x nClasses
+    L_y = pred[:, gtLabel].mean()
 
-    return imageLoss - misclassificationLoss
+    L = beta * L_x + L_y
 
-def FGSMLoss(input, target):
-    base_loss = F.nll_loss(input, target)
-    perturbed_image = fgsm_attack
+    return L
+
+
+def evaluate(model, data, adversaryNetwork, device):
+    if model.training:
+        model.eval()
+
+    with torch.no_grad():
+        # loss = 0
+        acc = 0
+        for batch, (X, y) in enumerate(data):
+            X, y = X.to(device), y.to(device)
+            gen = model(X)
+            pred = adversaryNetwork(gen)
+            # loss += loss_fn(pred, y).item()
+            
+            acc += torch.count_nonzero(y == pred.argmax(dim=-1))
+    
+    # loss = loss / (len(data.dataset) / batch_size)
+    acc = acc / len(data.dataset)
+
+    print(f"Val Accuracy: {acc}")
+
+
+def demo(model, adversary, device):
+    path = os.path.join("data")
+    dataset = torchvision.datasets.GTSRB(root=path, download=True, split="test")
+
+    if model.training:
+        model.eval()
+    if adversary.training:
+        adversary.eval()
+
+    n = 3
+
+    fig = plt.figure()
+    for i in range(n):
+        img, label = dataset[random.randint(0, len(dataset)-1)]
+        
+        X = gtsrb_utils.data_transforms(img).unsqueeze(0).to(device)
+
+        og_label = adversary(X).argmax(dim=-1).squeeze()
+        
+        gen = model(X)
+        pred_label = adversary(gen).argmax(dim=-1).squeeze()
+
+        fig.add_subplot(n, 3, 3*i+1)
+        plt.title(label_map[label])
+        plt.axis("off")
+        plt.imshow(img)
+
+        fig.add_subplot(n, 3, 3*i+2)
+        plt.title(label_map[og_label.item()])
+        plt.axis("off")
+        X = X.squeeze().detach().cpu()
+        X = torch.transpose(X, 1, 2)
+        X = torch.transpose(X, 0, 2)
+        plt.imshow(X)
+
+        fig.add_subplot(n, 3, 3*i+3)
+        plt.title(label_map[pred_label.item()])
+        plt.axis("off")
+        gen = gen.squeeze().detach().cpu()
+        perturbed = torch.transpose(gen, 1, 2)
+        perturbed = torch.transpose(perturbed, 0, 2)
+        plt.imshow(perturbed)
+    plt.show()
+
 
 def trainUNet(epochs: int, starting_epoch: int):
     # Hyperparameters
     learning_rate = 10e-4
-    batch_size = 512
+    batch_size = 64
     alpha = 10e-6
 
     # Load model and set weights
-    compareModel = gtsrb_utils.load_pretrained()
+    compareModel = gtsrb_utils.load_pretrained().to(device)
 
     model = UNet().to(device)
     model.train()
@@ -58,19 +114,13 @@ def trainUNet(epochs: int, starting_epoch: int):
     total_dataset = gtsrb_utils.load_gtsrb_dataset()
     print("Length:", len(total_dataset))
 
+    # Load Datasets
     train_set, val_set = torch.utils.data.random_split(total_dataset, (22644, 3996))
-    # Dataloader should be JUST for train data.
-    data_loader_train = DataLoader(train_set, shuffle=True, batch_size=64)
-
-    # Make Train/Test Split
-    # TODO: Fill this in. Use https://github.com/jfilter/split-folders potentially.
-
-    # Dataloader should be JUST for train data.
-    data_loader_train = DataLoader(train_set, shuffle=True)
+    data_loader_train = DataLoader(train_set, shuffle=True, batch_size=batch_size)
+    data_loader_val = DataLoader(val_set, shuffle=True, batch_size=batch_size)
 
     # Loss functions
-    
-    loss_fn = UNetLoss
+    loss_fn = UNetLoss_simple
 
     # Optimizer
     optimizer = Adam(model.parameters(), lr=learning_rate)
@@ -80,6 +130,8 @@ def trainUNet(epochs: int, starting_epoch: int):
         print(f"Epoch {t+1}\n-------------------------------")
         if not model.training:
             model.train()
+        if not compareModel.training:
+            compareModel.train()
 
         if (t+1) % 5 == 0:
             torch.save(model.state_dict(), os.path.join("data", "models", f"UNetTrain_{starting_epoch+t+1}.pth"))
@@ -89,7 +141,7 @@ def trainUNet(epochs: int, starting_epoch: int):
             X.requires_grad = True
             gen = model(X)
 
-            loss = loss_fn(X, gen, y, compareModel) # Learns the identity function
+            loss = loss_fn(X, gen, y, compareModel)
 
             optimizer.zero_grad()
             loss.backward()
@@ -98,3 +150,11 @@ def trainUNet(epochs: int, starting_epoch: int):
             if batch % 50 == 0:
                 loss, current = loss.item(), batch * len(X)
                 print(f"train loss: {loss:>7f}  [{current:>7d}/{len(data_loader_train.dataset):>7d}]")
+
+        evaluate(model, data_loader_val, compareModel, device)
+        demo(model, compareModel, device)
+        
+
+
+if __name__ == "__main__":
+    trainUNet(10, 0)
