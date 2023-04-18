@@ -4,6 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from torchvision import datasets, transforms
+from torch.utils.data import Dataset, DataLoader
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -12,11 +13,12 @@ epsilons = [0, .05, .1, .15, .2, .25, .3]
 pretrained_model = "data/lenet_mnist_model.pth"
 use_cuda=True
 
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # FGSM attack code
-def fgsm_attack(image, epsilon, data_grad):
+def fgsm_attack(image, epsilon):
     # Collect the element-wise sign of the data gradient
-    sign_data_grad = data_grad.sign()
+    sign_data_grad = image.grad.data.sign()
     # Create the perturbed image by adjusting each pixel of the input image
     perturbed_image = image + epsilon*sign_data_grad
     # Adding clipping to maintain [0,1] range
@@ -61,7 +63,7 @@ def test( model, device, test_loader, epsilon ):
         data_grad = data.grad.data
 
         # Call FGSM Attack
-        perturbed_data = fgsm_attack(data, epsilon, data_grad)
+        perturbed_data = fgsm_attack(data, epsilon)
 
         # Re-classify the perturbed image
         output = model(perturbed_data)
@@ -90,8 +92,17 @@ if __name__ == "__main__":
     accuracies = []
     examples = []
 
+    from networks import Net
+    import gtsrb_utils
+    model = gtsrb_utils.load_pretrained()
+
+    total_dataset = gtsrb_utils.load_gtsrb_dataset()
+    train_set, val_set = torch.utils.data.random_split(total_dataset, (22644, 3996))
+    data_loader_train = DataLoader(train_set, shuffle=True)
+
+
     # Run test for each epsilon
     for eps in epsilons:
-        acc, ex = test(model, device, test_loader, eps)
+        acc, ex = test(model, device, data_loader_train, eps)
         accuracies.append(acc)
         examples.append(ex)

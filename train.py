@@ -11,9 +11,11 @@ from torchvision import datasets
 from torchvision import transforms as transforms
 from torchvision.io import read_image
 from torch.utils.data import Dataset, DataLoader
+import torch.nn.functional as F
 
 from networks import UNet
 
+from fgsm import fgsm_attack
 
 import matplotlib.pyplot as plt
 
@@ -21,7 +23,24 @@ from networks import ConvClassifier
 import gtsrb_utils
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-            
+    
+# LOSS FUNCTION ZONE!
+
+# L(new image) = MSELoss(original image, new image) - MisclassificationMetric(correct label, new label)
+def UNetLoss(originalImage, newImage, actualLabel, adversaryNetwork):
+    imageComparison = nn.MSELoss()
+    imageLoss = imageComparison(originalImage, newImage)
+
+    labelComparison = nn.MSELoss()
+    # Find generatedLabel by actually running it through our adversaryNetwork.
+    generatedLabel = adversaryNetwork(newImage)
+    misclassificationLoss = labelComparison(actualLabel, generatedLabel)
+
+    return imageLoss - misclassificationLoss
+
+def FGSMLoss(input, target):
+    base_loss = F.nll_loss(input, target)
+    perturbed_image = fgsm_attack
 
 def trainUNet(epochs: int, starting_epoch: int):
     # Hyperparameters
@@ -34,8 +53,6 @@ def trainUNet(epochs: int, starting_epoch: int):
 
     model = UNet().to(device)
     model.train()
-    # def __init__(self, convKernel, num_in_channels, num_filters, num_colours):
-
 
     # Load dataset
     total_dataset = gtsrb_utils.load_gtsrb_dataset()
@@ -48,8 +65,12 @@ def trainUNet(epochs: int, starting_epoch: int):
     # Make Train/Test Split
     # TODO: Fill this in. Use https://github.com/jfilter/split-folders potentially.
 
-    # Loss Function
-    loss_fn = nn.MSELoss()
+    # Dataloader should be JUST for train data.
+    data_loader_train = DataLoader(train_set, shuffle=True)
+
+    # Loss functions
+    
+    loss_fn = UNetLoss
 
     # Optimizer
     optimizer = Adam(model.parameters(), lr=learning_rate)
@@ -60,10 +81,15 @@ def trainUNet(epochs: int, starting_epoch: int):
         if not model.training:
             model.train()
 
-        for batch, (X, _) in enumerate(data_loader_train):
-            X = X.to(device)
-            pred = model(X)
-            loss = loss_fn(pred, X) # Learns the identity function
+        if (t+1) % 5 == 0:
+            torch.save(model.state_dict(), os.path.join("data", "models", f"UNetTrain_{starting_epoch+t+1}.pth"))
+
+        for batch, (X, y) in enumerate(data_loader_train):
+            X, y = X.to(device), y.to(device)
+            X.requires_grad = True
+            gen = model(X)
+
+            loss = loss_fn(X, gen, y, compareModel) # Learns the identity function
 
             optimizer.zero_grad()
             loss.backward()
