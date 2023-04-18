@@ -21,11 +21,11 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     
 # LOSS FUNCTION ZONE!
 
-def UNetLoss_simple(originalImage, newImage, gtLabel, adversaryNetwork, beta=5):
+def UNetLoss_simple(originalImage, newImage, gtLabel, adversaryNetwork, beta=0.1):
     L_x = nn.functional.mse_loss(originalImage, newImage)
 
     pred = nn.functional.softmax(adversaryNetwork(newImage), dim=-1) # Tensor of size batch_size x nClasses
-    L_y = pred[:, gtLabel].mean()
+    L_y = pred[:, gtLabel].sum()
 
     L = beta * L_x + L_y
 
@@ -53,7 +53,7 @@ def evaluate(model, data, adversaryNetwork, device):
     print(f"Val Accuracy: {acc}")
 
 
-def demo(model, adversary, device):
+def demo(model, adversary, epsilon, device):
     path = os.path.join("data")
     dataset = torchvision.datasets.GTSRB(root=path, download=True, split="test")
 
@@ -62,25 +62,31 @@ def demo(model, adversary, device):
     if adversary.training:
         adversary.eval()
 
-    n = 3
+    n = 4
 
     fig = plt.figure()
     for i in range(n):
         img, label = dataset[random.randint(0, len(dataset)-1)]
-        
+        resized = gtsrb_utils.just_resize(img).unsqueeze(0).to(device)
+
         X = gtsrb_utils.data_transforms(img).unsqueeze(0).to(device)
-
         og_label = adversary(X).argmax(dim=-1).squeeze()
-        
-        gen = model(X)
-        pred_label = adversary(gen).argmax(dim=-1).squeeze()
 
-        fig.add_subplot(n, 3, 3*i+1)
+        gen = model(X)
+        noised = noisify(X, gen, epsilon)
+        pred_label = adversary(noised).argmax(dim=-1).squeeze()
+
+        untransformed = gtsrb_utils.inverse_transforms(noised).unsqueeze(0).to(device)
+
+        fig.add_subplot(n, 4, 4*i+1)
         plt.title(label_map[label])
         plt.axis("off")
-        plt.imshow(img)
+        resized = resized.squeeze().detach().cpu()
+        resized = torch.transpose(resized, 1, 2)
+        resized = torch.transpose(resized, 0, 2)
+        plt.imshow(resized)
 
-        fig.add_subplot(n, 3, 3*i+2)
+        fig.add_subplot(n, 4, 4*i+2)
         plt.title(label_map[og_label.item()])
         plt.axis("off")
         X = X.squeeze().detach().cpu()
@@ -88,21 +94,35 @@ def demo(model, adversary, device):
         X = torch.transpose(X, 0, 2)
         plt.imshow(X)
 
-        fig.add_subplot(n, 3, 3*i+3)
+        fig.add_subplot(n, 4, 4*i+3)
         plt.title(label_map[pred_label.item()])
         plt.axis("off")
-        gen = gen.squeeze().detach().cpu()
-        perturbed = torch.transpose(gen, 1, 2)
-        perturbed = torch.transpose(perturbed, 0, 2)
-        plt.imshow(perturbed)
+        noised = noised.squeeze().detach().cpu()
+        noised = torch.transpose(noised, 1, 2)
+        noised = torch.transpose(noised, 0, 2)
+        plt.imshow(noised)
+
+        fig.add_subplot(n, 4, 4*i+4)
+        plt.title(label_map[pred_label.item()])
+        plt.axis("off")
+        untransformed = untransformed.squeeze().detach().cpu()
+        untransformed = torch.transpose(untransformed, 1, 2)
+        untransformed = torch.transpose(untransformed, 0, 2)
+        plt.imshow(untransformed)
     plt.show()
 
+def noisify(originalImage, generatedImage, epsilon): 
+    # return generatedImage
+    normalized = nn.functional.tanh(generatedImage)
+    return originalImage + epsilon * normalized
 
 def trainUNet(epochs: int, starting_epoch: int):
     # Hyperparameters
     learning_rate = 10e-4
     batch_size = 64
     alpha = 10e-6
+    epsilon = 0.5 # Max influence the noise can have in the generated image
+    beta = 0.1 # How much influence image closeness has on total loss
 
     # Load model and set weights
     compareModel = gtsrb_utils.load_pretrained().to(device)
@@ -115,7 +135,10 @@ def trainUNet(epochs: int, starting_epoch: int):
     print("Length:", len(total_dataset))
 
     # Load Datasets
-    train_set, val_set = torch.utils.data.random_split(total_dataset, (22644, 3996))
+    train_size = int(len(total_dataset) * 0.5)
+    test_size = int(len(total_dataset) * 0.3)
+    val_size = int(len(total_dataset) * 0.2)
+    train_set, test_set, val_set = torch.utils.data.random_split(total_dataset, (train_size, test_size, val_size))
     data_loader_train = DataLoader(train_set, shuffle=True, batch_size=batch_size)
     data_loader_val = DataLoader(val_set, shuffle=True, batch_size=batch_size)
 
@@ -124,6 +147,9 @@ def trainUNet(epochs: int, starting_epoch: int):
 
     # Optimizer
     optimizer = Adam(model.parameters(), lr=learning_rate)
+
+    demo(model, compareModel, epsilon, device)
+    # return
 
     # Train loop
     for t in range(epochs):
@@ -139,20 +165,22 @@ def trainUNet(epochs: int, starting_epoch: int):
         for batch, (X, y) in enumerate(data_loader_train):
             X, y = X.to(device), y.to(device)
             X.requires_grad = True
-            gen = model(X)
 
-            loss = loss_fn(X, gen, y, compareModel)
+            gen = model(X)
+            noised_gen = noisify(X, gen, epsilon)
+
+            loss = loss_fn(X, noised_gen, y, compareModel, beta=beta)
 
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
 
-            if batch % 50 == 0:
+            if batch % 25 == 0:
                 loss, current = loss.item(), batch * len(X)
                 print(f"train loss: {loss:>7f}  [{current:>7d}/{len(data_loader_train.dataset):>7d}]")
 
         evaluate(model, data_loader_val, compareModel, device)
-        demo(model, compareModel, device)
+        demo(model, compareModel, epsilon, device)
         
 
 
