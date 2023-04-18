@@ -94,7 +94,7 @@ class UNet(nn.Module):
         output = self.decoder(encodedFeatures)
 
         if self.normalize:
-            output = nn.functional.sigmoid(output)
+            output = torch.sigmoid(output)
         
         return output 
     
