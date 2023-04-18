@@ -75,11 +75,11 @@ def load_pretrained() -> Net:
     return model
 
 
-def load_gtsrb_dataloader(split="train") -> DataLoader:
+def load_gtsrb_dataloader(batch_size=64, split="train") -> DataLoader:
     path = os.path.join("data")
 
     dataset = torchvision.datasets.GTSRB(root=path, download=True, transform=data_transforms, split=split)
-    data_loader = DataLoader(dataset, shuffle=True)
+    data_loader = DataLoader(dataset, shuffle=True, batch_size=batch_size)
 
     return data_loader
 
