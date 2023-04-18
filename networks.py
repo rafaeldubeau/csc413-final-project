@@ -78,18 +78,23 @@ class UNet(nn.Module):
     Old version was I think needlyless complicated!
     """
 
-    def __init__(self, channels=(3, 16, 32, 64, 128)):
+    def __init__(self, channels=(3, 16, 32, 64, 128), normalize=True):
         super().__init__()
         decodeChannels = channels[::-1]
         # Initialize Encoder and Decoder
         self.encoder = Encoder(channels)
         self.decoder = Decoder(decodeChannels)
 
+        self.normalize = normalize
+
     def forward(self, x):
         encodedFeatures = self.encoder(x)
         # Pass encoder features through decoder, making sure dimensions are suited for concatenation
         # The first one is the final output (bottom of the U), and the rest are the features to work with
         output = self.decoder(encodedFeatures)
+
+        if self.normalize:
+            output = nn.functional.sigmoid(output)
         
         return output 
     

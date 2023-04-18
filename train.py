@@ -32,6 +32,34 @@ def UNetLoss_simple(originalImage, newImage, gtLabel, adversaryNetwork, beta=0.1
     return L
 
 
+def UNetLoss_baluja(originalImage, newImage, gtLabel, adversaryNetwork, beta=0.1):
+
+    # Compute reranking
+    alpha = 1.5
+    y = nn.functional.softmax(adversaryNetwork(originalImage), dim=-1)
+    ymax, _ = y.max(dim=-1) # B x 1
+    values, indices = y.topk(2, dim=-1) # B x 2
+    t = indices[:, 1] # B x 1 of indices
+
+    print(ymax.size())
+    print(ymax.dtype)
+    y[:, t] = alpha * ymax # This might break
+    y_prime = nn.functional.softmax(y, dim=-1)
+
+    # Get prediction on on new image
+    y = nn.functional.softmax(adversaryNetwork(newImage), dim=-1)
+
+    # Compute losses
+    L_x = nn.functional.mse_loss(originalImage, newImage) # TODO: maybe we need to change this to before normalization
+    L_y = nn.functional.mse_loss(y, y_prime)
+
+    L = beta * L_x + L_y
+
+    return L
+
+
+
+
 def evaluate(model, data, adversaryNetwork, device):
     if model.training:
         model.eval()
@@ -42,6 +70,7 @@ def evaluate(model, data, adversaryNetwork, device):
         for batch, (X, y) in enumerate(data):
             X, y = X.to(device), y.to(device)
             gen = model(X)
+            gen = noisify(X, gen, 0)
             pred = adversaryNetwork(gen)
             # loss += loss_fn(pred, y).item()
             
@@ -105,24 +134,24 @@ def demo(model, adversary, epsilon, device):
         fig.add_subplot(n, 4, 4*i+4)
         plt.title(label_map[pred_label.item()])
         plt.axis("off")
-        untransformed = untransformed.squeeze().detach().cpu()
-        untransformed = torch.transpose(untransformed, 1, 2)
-        untransformed = torch.transpose(untransformed, 0, 2)
-        plt.imshow(untransformed)
+        gen = gen.squeeze().detach().cpu()
+        gen = torch.transpose(gen, 1, 2)
+        gen = torch.transpose(gen, 0, 2)
+        plt.imshow(gen)
     plt.show()
 
 def noisify(originalImage, generatedImage, epsilon): 
-    # return generatedImage
-    normalized = nn.functional.tanh(generatedImage)
-    return originalImage + epsilon * normalized
+    return gtsrb_utils.just_normalize(generatedImage)
+    # normalized = nn.functional.tanh(generatedImage)
+    # return originalImage + epsilon * normalized
 
 def trainUNet(epochs: int, starting_epoch: int):
     # Hyperparameters
     learning_rate = 10e-4
-    batch_size = 64
+    batch_size = 128
     alpha = 10e-6
     epsilon = 0.5 # Max influence the noise can have in the generated image
-    beta = 0.1 # How much influence image closeness has on total loss
+    beta = 1 # How much influence image closeness has on total loss
 
     # Load model and set weights
     compareModel = gtsrb_utils.load_pretrained().to(device)
@@ -143,12 +172,12 @@ def trainUNet(epochs: int, starting_epoch: int):
     data_loader_val = DataLoader(val_set, shuffle=True, batch_size=batch_size)
 
     # Loss functions
-    loss_fn = UNetLoss_simple
+    loss_fn = UNetLoss_baluja
 
     # Optimizer
     optimizer = Adam(model.parameters(), lr=learning_rate)
 
-    demo(model, compareModel, epsilon, device)
+    # demo(model, compareModel, epsilon, device)
     # return
 
     # Train loop

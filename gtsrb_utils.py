@@ -78,6 +78,8 @@ data_transforms = transforms.Compose([
     transforms.Normalize(mean, std)
     ])
 
+just_normalize = transforms.Normalize(mean, std)
+
 just_resize = transforms.Compose([
     transforms.Resize((32, 32)),
     transforms.ToTensor()
@@ -104,10 +106,14 @@ def load_gtsrb_dataloader(batch_size=64, split="train") -> DataLoader:
     return data_loader
 
 
-def load_gtsrb_dataset(split="train") -> Dataset:
+def load_gtsrb_dataset(split="train", normalize=True) -> Dataset:
     path = os.path.join("data")
 
-    dataset = torchvision.datasets.GTSRB(root=path, download=True, transform=data_transforms, split=split)
+    if normalize:
+        trans = data_transforms
+    else:
+        trans = just_resize
+    dataset = torchvision.datasets.GTSRB(root=path, download=True, transform=trans, split=split)
 
     return dataset
 
