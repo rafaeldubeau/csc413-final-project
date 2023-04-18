@@ -9,10 +9,13 @@ from sklearn import metrics
 import numpy as np
 import matplotlib.pyplot as plt
 
-from six.moves import urllib
-opener = urllib.request.build_opener()
-opener.addheaders = [('User-agent', 'Mozilla/5.0')]
-urllib.request.install_opener(opener)
+
+import gtsrb_utils
+
+# from six.moves import urllib
+# opener = urllib.request.build_opener()
+# opener.addheaders = [('User-agent', 'Mozilla/5.0')]
+# urllib.request.install_opener(opener)
 
 
 
@@ -37,26 +40,24 @@ def test( model, device, test_loader, epsilon ):
     y_pred = []
     # Loop over all examples in test set
     for data, target in test_loader:
-        # Send the data and label to the device
         data, target = data.to(device), target.to(device)
 
-        # Set requires_grad attribute of tensor. Important for Attack
         data.requires_grad = True
 
         # Forward pass the data through the model
-        output = model(data)
-        init_pred = output.max(1, keepdim=True)[1] # get the index of the max log-probability
+        output = F.log_softmax(model(data), dim=-1)
+        init_pred = output.max(dim=-1, keepdim=True)[1] # get the index of the max log-probability
 
         # If the initial prediction is wrong, don't bother attacking, just move on
-        if init_pred.item() != target.item():
-            continue
-        y_true.append(target.item())
+        # if init_pred.item() != target.item():
+        #     continue
+        # y_true.append(target.item())
+
         # Calculate the loss
         loss = F.nll_loss(output, target)
 
         # Zero all existing gradients
         model.zero_grad()
-
         # Calculate gradients of model in backward pass
         loss.backward()
 
@@ -70,19 +71,19 @@ def test( model, device, test_loader, epsilon ):
         output = model(perturbed_data)
 
         # Check for success
-        final_pred = output.max(1, keepdim=True)[1] # get the index of the max log-probability
-        y_pred.append(final_pred.item())
-        if final_pred.item() == target.item():
-            correct += 1
-            # Special case for saving 0 epsilon examples
-            if (epsilon == 0) and (len(adv_examples) < 5):
-                adv_ex = perturbed_data.squeeze().detach().cpu().numpy()
-                adv_examples.append( (init_pred.item(), final_pred.item(), adv_ex) )
-        else:
-            # Save some adv examples for visualization later
-            if len(adv_examples) < 5:
-                adv_ex = perturbed_data.squeeze().detach().cpu().numpy()
-                adv_examples.append( (init_pred.item(), final_pred.item(), adv_ex) )
+        final_pred = output.max(dim=-1, keepdim=True)[1] # get the index of the max log-probability
+        # y_pred.append(final_pred.item())
+        # if final_pred.item() == target.item():
+        #     correct += 1
+        #     # Special case for saving 0 epsilon examples
+        #     if (epsilon == 0) and (len(adv_examples) < 5):
+        #         adv_ex = perturbed_data.squeeze().detach().cpu().numpy()
+        #         adv_examples.append( (init_pred.item(), final_pred.item(), adv_ex) )
+        # else:
+        #     # Save some adv examples for visualization later
+        #     if len(adv_examples) < 5:
+        #         adv_ex = perturbed_data.squeeze().detach().cpu().numpy()
+        #         adv_examples.append( (init_pred.item(), final_pred.item(), adv_ex) )
 
     f1_score = metrics.f1_score(y_true, y_pred, average='macro')
     precision = metrics.precision_score(y_true, y_pred, average='macro')
@@ -98,6 +99,7 @@ def test( model, device, test_loader, epsilon ):
 
 if __name__ == "__main__":
     epsilons = [0, .05, .1, .15, .2, .25, .3]
+    # epsilons = [1/(2*(n+1)) for n in range(1000)]
     accuracies = []
     f1s = []
     precs = []
@@ -105,18 +107,17 @@ if __name__ == "__main__":
     mccs = []
     examples = []
 
-    import gtsrb_utils
-    model = gtsrb_utils.load_pretrained()
     use_cuda = True
     # Define what device we are using
     print("CUDA Available: ", torch.cuda.is_available())
     device = torch.device("cuda" if (use_cuda and torch.cuda.is_available()) else "cpu")
 
 
-    total_dataset = gtsrb_utils.load_gtsrb_dataset()
-    train_set, val_set = torch.utils.data.random_split(total_dataset, (22644, 3996))
-    data_loader_train = DataLoader(train_set, shuffle=True)
-    test_loader = DataLoader(val_set, shuffle=True)
+    model = gtsrb_utils.load_pretrained().to(device)
+
+    test_dataset = gtsrb_utils.load_gtsrb_dataset(split="test")
+    print(len(test_dataset))
+    test_loader = DataLoader(test_dataset, shuffle=True, batch_size=512)
 
     # Run test for each epsilon
     for eps in epsilons:
