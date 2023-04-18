@@ -3,7 +3,7 @@ import random
 
 import torch
 import torchvision
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms as transforms
 
 import matplotlib.pyplot as plt
@@ -82,6 +82,14 @@ def load_gtsrb_dataloader(batch_size=64, split="train") -> DataLoader:
     data_loader = DataLoader(dataset, shuffle=True, batch_size=batch_size)
 
     return data_loader
+
+
+def load_gtsrb_dataset(split="train") -> Dataset:
+    path = os.path.join("data")
+
+    dataset = torchvision.datasets.GTSRB(root=path, download=True, transform=data_transforms, split=split)
+
+    return dataset
 
 
 def demo_pretrained():

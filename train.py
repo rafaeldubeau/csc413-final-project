@@ -12,6 +12,8 @@ from torchvision import transforms as transforms
 from torchvision.io import read_image
 from torch.utils.data import Dataset, DataLoader
 
+from networks import UNet
+
 
 import matplotlib.pyplot as plt
 
@@ -28,22 +30,23 @@ def trainUNet(epochs: int, starting_epoch: int):
     alpha = 10e-6
 
     # Load model and set weights
-    from networks import Net
     compareModel = gtsrb_utils.load_pretrained()
 
-    from networks import UNet
     model = UNet().to(device)
     model.train()
     # def __init__(self, convKernel, num_in_channels, num_filters, num_colours):
 
 
     # Load dataset
-    data_loader = gtsrb_utils.load_gtsrb_dataloader()
+    total_dataset = gtsrb_utils.load_gtsrb_dataset()
+    print("Length:", len(total_dataset))
+
+    train_set, val_set = torch.utils.data.random_split(total_dataset, (22644, 3996))
+    # Dataloader should be JUST for train data.
+    data_loader_train = DataLoader(train_set, shuffle=True, batch_size=64)
 
     # Make Train/Test Split
     # TODO: Fill this in. Use https://github.com/jfilter/split-folders potentially.
-    # Dataloader should be JUST for train data.
-    data_loader_train = data_loader
 
     # Loss Function
     loss_fn = nn.MSELoss()
