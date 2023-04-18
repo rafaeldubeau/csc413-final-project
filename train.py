@@ -62,12 +62,18 @@ def trainUNet(epochs: int, starting_epoch: int):
     compareModel = gtsrb_utils.load_pretrained()
 
     from networks import UNet
-    model = UNet()
+    model = UNet().to(device)
+    model.train()
     # def __init__(self, convKernel, num_in_channels, num_filters, num_colours):
 
 
     # Load dataset
     data_loader = gtsrb_utils.load_gtsrb_dataloader()
+
+    # Make Train/Test Split
+    # TODO: Fill this in. Use https://github.com/jfilter/split-folders potentially.
+    # Dataloader should be JUST for train data.
+    data_loader_train = data_loader
 
     # Loss functions
     base_loss = nn.MSELoss()
@@ -83,7 +89,7 @@ def trainUNet(epochs: int, starting_epoch: int):
     # Train loop
     for t in range(epochs):
         print(f"Epoch {t+1}\n-------------------------------")
-        train_epoch(model, data_loader, optimizer, UNetLoss, device)
+        train_epoch(model, data_loader_train, optimizer, UNetLoss, device)
         if (t+1) % 5 == 0:
             torch.save(model.state_dict(), os.path.join("data", "models", f"UNetTrain_{starting_epoch+t+1}.pth"))
 

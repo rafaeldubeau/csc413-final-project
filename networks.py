@@ -15,18 +15,22 @@ class DownBlock(nn.Module):
     def __init__(self, inChannels, outChannels):
         super().__init__()
 		# store the convolution and RELU layers
-        self.sequence = nn.Sequential(
-            torch.nn.Conv2d(inChannels, outChannels, 3),
-            torch.nn.BatchNorm2d(outChannels),
-            torch.nn.Conv2d(inChannels, outChannels, 3),
-            torch.nn.ReLU()
-            # torch.nn.BatchNorm2d(out_channels),
-            # torch.nn.ReLU(),
-            # torch.nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
-            )
+        print("In Channels: ", inChannels, " Out Channels: ", outChannels)
+        self.conv1 = torch.nn.Conv2d(inChannels, outChannels, 2)
+        self.batchNorm = torch.nn.BatchNorm2d(outChannels)
+        self.ReLU = torch.nn.ReLU()
+        # torch.nn.BatchNorm2d(out_channels),
+        # torch.nn.ReLU(),
+        # torch.nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+
     def forward(self, x):
         # apply CONV => RELU => CONV block to the inputs and return it
-        return self.sequence(x)
+        y = self.conv1(x)
+        # print("\t y shape (conv):\t", y.shape)
+        y = self.batchNorm(y)
+        y = self.ReLU(y)
+        return y
+        # return self.sequence(x)
 
 class Encoder(nn.Module):
     def __init__(self, channels=(3, 16, 32, 64, 128)):
@@ -38,7 +42,9 @@ class Encoder(nn.Module):
     def forward(self, x):
         blockOutputs = []
         for block in self.encodeBlocks:
+            print("\t Initial x shape:\t", x.shape)
             x = block(x)
+            print("\t New x shape:\t", x.shape)
             blockOutputs.append(x)
             x = self.pool(x)
         return blockOutputs
@@ -48,34 +54,30 @@ class Decoder(nn.Module):
         super().__init__()
         self.channels = channels
         self.upconvs = nn.ModuleList(
-            [nn.ConvTranspose2d(channels[i], channels[i+1], 2, 2) for i in range(len(channels) - 1)]
+            [nn.ConvTranspose2d(channels[i], channels[i+1], 3, stride=1, dilation=2, output_padding=0) for i in range(len(channels) - 1)]
         )
+        self.pool = nn.MaxPool2d(2)
         self.decodeBlocks = nn.ModuleList(
             [DownBlock(channels[i], channels[i+1]) for i in range(len(channels) - 1)]
         )
     
-    def crop(self, encodedFeatures, x):
-        # grab the dimensions of the inputs, and crop the encoder
-		# features to match the dimensions
-        (_, _, H, W) = x.shape
-        encodedFeatures = nn.CenterCrop([H, W])(encodedFeatures)
-        # return the cropped features
-        return encodedFeatures
-    
     def forward(self, x, encodedFeatures):
-        for i in range(len(self.channels) - 1):
-            # Pass thru upsampler blocks
-            x = self.upconvs[i](x)
-
         # loop through the number of channels
+        print("PASSING X THROUGH DECODER")
         for i in range(len(self.channels) - 1):
+            print("ITERATION ", i)
 			# Pass the inputs through upsampler block.
-            x = self.upconvs[i](x)
+            print("\t Initial x shape:\t", x.shape)
+            y = self.upconvs[i](x)
+            print("\t y shape (upconved):\t", y.shape)
+            print("\t encoded[i] shape:\t", encodedFeatures[i].shape)
 			# Crop current features from encoder blocks, concatenate with the current upsampled features.
-            encFeat = self.crop(encodedFeatures[i], x)
-            x = torch.cat([x, encFeat], dim=1)
+            # encFeat = self.crop(encodedFeatures[i], x)
+            y = torch.cat([y, encodedFeatures[i]], dim=1)
+            print("\ty shape post-concat:\t", y.shape)
 			# Pass the concatenated output through the current decoder block.
-            x = self.dec_blocks[i](x)
+            x = self.decodeBlocks[i](y)
+            print("\tFinal x shape:", x.shape, "\n")
         return x
 
 class UNet(nn.Module):
@@ -85,7 +87,7 @@ class UNet(nn.Module):
     Old version was I think needlyless complicated!
     """
 
-    def __init__(self, encodeChannels=(3, 16, 32, 64), decodeChannels=(64, 32, 16),
+    def __init__(self, encodeChannels=(3, 16, 32, 64, 128), decodeChannels=(128, 64, 32, 16),
                  numClasses=1, retainDimension=True, outSize=(32, 32)):
         super().__init__()
         # Initialize Encoder and Decoder
@@ -98,6 +100,9 @@ class UNet(nn.Module):
 
     def forward(self, x):
         encodedFeatures = self.encoder(x)
+        print("ENCODER FEATURES GENERATED:")
+        for i in range(len(encodedFeatures)):
+            print("\t ",i , encodedFeatures[i].shape)
         
         # Pass encoder features through decoder, making sure dimensions are suited for concatenation
         # The first one is the final output (bottom of the U), and the rest are the features to work with
@@ -113,7 +118,6 @@ class UNet(nn.Module):
         # if self.retainDimension:
         #     map = F.interpolate(map, self.outSize)
         # return map
-        
     
 
 class Conv2dBlock(nn.Module):

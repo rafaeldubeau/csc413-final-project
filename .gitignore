@@ -1,3 +1,4 @@
 data/gtsrb/**
 model/gtsrb
 __pycache__
+*.DS_Store
