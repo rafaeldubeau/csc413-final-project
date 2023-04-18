@@ -68,13 +68,17 @@ def trainUNet(epochs: int, starting_epoch: int):
 
 
     # Load dataset
-    data_loader = gtsrb_utils.load_gtsrb_dataloader()
+    total_dataset = gtsrb_utils.load_gtsrb_dataset()
+    print("Length:", len(total_dataset))
+
+    train_set, val_set = torch.utils.data.random_split(total_dataset, (22644, 3996))
 
     # Make Train/Test Split
     # TODO: Fill this in. Use https://github.com/jfilter/split-folders potentially.
-    # Dataloader should be JUST for train data.
-    data_loader_train = data_loader
 
+    # Dataloader should be JUST for train data.
+    data_loader_train = DataLoader(train_set, shuffle=True)
+    
     # Loss functions
     base_loss = nn.MSELoss()
     
