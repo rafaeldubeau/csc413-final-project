@@ -166,6 +166,7 @@ def CraftingAlg_untargeted(img, model, theta, allow_stacking=True, upsilon=torch
         guess = y.argmax(dim=-1)
         # print(f"guess: {guess}={y[guess]}\tt: {t}={y[t]}\t{y}")
 
+    model.cpu()
     return X.cpu(), delta
 
 
