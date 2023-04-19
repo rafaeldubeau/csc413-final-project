@@ -110,6 +110,16 @@ def evaluate(model, data, loss_fn, device):
     print(f"Val Loss: {loss}, Val Accuracy: {acc}")
 
 
+def load_copycat(epoch=10) -> ConvClassifier:
+    path = os.path.join("data", f"copycat_{epoch}.pth")
+    copycat =  ConvClassifier(3, 43)
+    copycat.load_state_dict(torch.load(path))
+
+    copycat = copycat.eval()
+
+    return copycat
+
+
 if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
