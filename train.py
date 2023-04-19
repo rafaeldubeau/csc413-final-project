@@ -196,7 +196,7 @@ def trainUNet(epochs: int, starting_epoch: int = 0):
     print("Length:", len(total_dataset))
 
     # Load Datasets
-    train_size = int(len(total_dataset) * 0.6)
+    train_size = int(len(total_dataset) * 0.85)
     val_size = int(len(total_dataset) * 0.15)
     train_set, val_set = torch.utils.data.random_split(total_dataset, 
                                 (train_size, val_size)) 
@@ -208,7 +208,7 @@ def trainUNet(epochs: int, starting_epoch: int = 0):
 
     # Load weights, if starting_epochs is above 1
     if starting_epoch > 0:
-        model.load_state_dict(torch.load(os.path.join("data", "models", f"UNetTrain_{starting_epoch}.pth")))
+        model.load_state_dict(torch.load(os.path.join("data", f"models_t{target}_{alpha}_{beta}", f"UNetTrain_{starting_epoch}.pth")))
 
     # Loss functions
     loss_fn = UNetLoss_baluja
@@ -216,8 +216,12 @@ def trainUNet(epochs: int, starting_epoch: int = 0):
     # Optimizer
     optimizer = Adam(model.parameters(), lr=learning_rate)
 
-    demo(model, compareModel, epsilon, device)
+    # demo(model, compareModel, epsilon, device)
     # return
+
+    # Create a folder in which to store our data.
+    dirExists = os.path.exists(f"data/models_t{target}_{alpha}_{beta}")
+    if not dirExists: os.makedirs(f"data/models_t{target}_{alpha}_{beta}")
 
     # Train loop
     for t in range(epochs):
@@ -227,8 +231,8 @@ def trainUNet(epochs: int, starting_epoch: int = 0):
         if not compareModel.training:
             compareModel.train()
 
-        if (t+1) % 5 == 0:
-            torch.save(model.state_dict(), os.path.join("data", "models", f"UNetTrain_{starting_epoch+t+1}.pth"))
+        if (t+1) % 1 == 0:
+            torch.save(model.state_dict(), os.path.join("data", f"models_t{target}_{alpha}_{beta}", f"UNetTrain_{starting_epoch+t+1}.pth"))
 
         for batch, (X, y) in enumerate(data_loader_train):
             X, y = X.to(device), y.to(device)
@@ -247,7 +251,7 @@ def trainUNet(epochs: int, starting_epoch: int = 0):
                 loss, current = loss.item(), batch * len(X)
                 print(f"train loss: {loss:>7f}  [{current:>7d}/{len(data_loader_train.dataset):>7d}]")
 
-        validate_loss = evaluate(model, data_loader_val, compareModel, device)
+        validate_loss = evaluate(model, data_loader_val, compareModel, loss_fn, device)
         train_losses.append(loss.item())
         validation_losses.append(validate_loss)
         
@@ -263,4 +267,6 @@ def trainUNet(epochs: int, starting_epoch: int = 0):
 
 
 if __name__ == "__main__":
-    trainUNet(40, 40)
+    print("torch.cuda.is_available()", torch.cuda.is_available())
+    print(device)
+    trainUNet(40, 0)
