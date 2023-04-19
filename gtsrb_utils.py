@@ -94,6 +94,8 @@ def load_pretrained() -> Net:
     weights = torch.load(os.path.join("gtsrb", "model", "model_40.pth"))
     model.load_state_dict(weights)
 
+    model.eval()
+
     return model
 
 
