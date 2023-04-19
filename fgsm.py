@@ -9,6 +9,8 @@ matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 import gtsrb_utils
 
+from gtsrb_utils import just_normalize
+
 from torch import nn, Tensor
 
 
@@ -33,7 +35,7 @@ def fgsm(imgs: Tensor, labels: Tensor, classifier: nn.Module, epsilon: float) ->
     X.requires_grad = True
 
     # Forward pass the data through the classifier model
-    output = F.log_softmax(classifier(X), dim=-1)
+    output = F.log_softmax(classifier(just_normalize(X)), dim=-1)
 
     # Compute loss
     loss = F.nll_loss(output, labels)
@@ -45,7 +47,7 @@ def fgsm(imgs: Tensor, labels: Tensor, classifier: nn.Module, epsilon: float) ->
 
     # Execute FGSM to get a perturbed image
     sign_data_grad = data_grad.sign()
-    perturbed_image = X + epsilon * sign_data_grad
+    perturbed_image = torch.clamp(X + epsilon * sign_data_grad, 0, 1)
 
     classifier.cpu()
     return perturbed_image.cpu()
