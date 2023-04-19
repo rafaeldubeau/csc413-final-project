@@ -145,6 +145,16 @@ def evaluate_crafting(dataloader: DataLoader, use_copycat: bool = False):
         print(f"Crafting ({theta}, {upsilon}, {allow_stacking})  -  accuracy: {accuracy}, f1_score: {f1_score}, avg_l2: {avg_l2}, avg_l2_succ: {avg_l2_succ}")
 
 
+def final_fgsm_eval():
+    dataset = load_gtsrb_dataset(split="test", normalize=True)
+    dataloader = DataLoader(dataset, batch_size=64, shuffle=True)
+
+    print("---------------Using Pretrained Model------")
+    evaluate_fgsm(dataloader, use_copycat=False)
+    print("---------------Using Copycat---------------")
+    evaluate_fgsm(dataloader, use_copycat=True)
+
+
 def final_Unet_eval():
     dataset = load_gtsrb_dataset(split="test", normalize=True)
     dataloader = DataLoader(dataset, batch_size=128, shuffle=True)
@@ -153,4 +163,4 @@ def final_Unet_eval():
 
 
 if __name__ == "__main__":
-    final_Unet_eval()
+    final_fgsm_eval()
