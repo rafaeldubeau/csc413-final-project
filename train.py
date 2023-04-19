@@ -32,12 +32,12 @@ def UNetLoss_simple(originalImage, newImage, gtLabel, adversaryNetwork, beta=0.1
     return L
 
 
-def UNetLoss_baluja(originalImage, newImage, gtLabel, adversaryNetwork, beta=0.5, target=0):
+def UNetLoss_baluja(originalImage, newImage, gtLabel, adversaryNetwork, beta=0.8, target=0):
 
     
     with torch.no_grad():
         # Compute reranking
-        alpha = 5
+        alpha = 3
         y = nn.functional.softmax(adversaryNetwork(originalImage), dim=-1)
         ymax, max_indices = y.max(dim=-1) # B x 1
         if target == -1:
@@ -64,12 +64,12 @@ def UNetLoss_baluja(originalImage, newImage, gtLabel, adversaryNetwork, beta=0.5
 
 
 
-def evaluate(model, data, adversaryNetwork, device, target=0):
+def evaluate(model, data, adversaryNetwork, loss_fn, device, target=0):
     if model.training:
         model.eval()
 
     with torch.no_grad():
-        # loss = 0
+        loss = 0
         ranking_acc = 0.0
         target_acc = 0.0
         for batch, (X, y) in enumerate(data):
@@ -77,7 +77,7 @@ def evaluate(model, data, adversaryNetwork, device, target=0):
             gen = model(X)
             gen = noisify(X, gen, 0)
             pred = adversaryNetwork(gen)
-            # loss += loss_fn(pred, y).item()
+            loss += loss_fn(X, gen, y, adversaryNetwork).item()
 
             values, indices = pred.topk(2, dim=-1)
             
@@ -88,7 +88,7 @@ def evaluate(model, data, adversaryNetwork, device, target=0):
     ranking_acc = ranking_acc / len(data.dataset)
     target_acc = target_acc / len(data.dataset)
 
-    print(f"Target Accuracy: {target_acc}, Ranking Accuracy: {ranking_acc}")
+    print(f"Target Accuracy: {target_acc}, Ranking Accuracy: {ranking_acc}, total loss: {loss}")
 
 
 def demo(model, adversary, epsilon, device):
@@ -156,11 +156,11 @@ def noisify(originalImage, generatedImage, epsilon):
     # normalized = nn.functional.tanh(generatedImage)
     # return originalImage + epsilon * normalized
 
-def trainUNet(epochs: int, starting_epoch: int):
+def trainUNet(epochs: int, starting_epoch: int = 0):
     # Hyperparameters
-    learning_rate = 10e-4
-    batch_size = 128
-    alpha = 10e-6
+    learning_rate = 1e-3
+    batch_size = 256
+    alpha = 1e-4
     epsilon = 0.5 # Max influence the noise can have in the generated image
     beta = 0.1 # How much influence image closeness has on total loss
     target = 0
@@ -170,6 +170,10 @@ def trainUNet(epochs: int, starting_epoch: int):
 
     model = UNet().to(device)
     model.train()
+
+    model_path = os.path.join("data", "models", f"UNetTrain_{starting_epoch}.pth")
+    if starting_epoch > 0 and os.path.exists(model_path):
+        model.load_state_dict(torch.load(model_path))
 
     # Load dataset
     total_dataset = gtsrb_utils.load_gtsrb_dataset()
@@ -188,12 +192,12 @@ def trainUNet(epochs: int, starting_epoch: int):
     # Optimizer
     optimizer = Adam(model.parameters(), lr=learning_rate)
 
-    # demo(model, compareModel, epsilon, device)
+    demo(model, compareModel, epsilon, device)
     # return
 
     # Train loop
     for t in range(epochs):
-        print(f"Epoch {t+1}\n-------------------------------")
+        print(f"Epoch {starting_epoch+t+1}\n-------------------------------")
         if not model.training:
             model.train()
         if not compareModel.training:
@@ -220,11 +224,11 @@ def trainUNet(epochs: int, starting_epoch: int):
                 print(f"train loss: {loss:>7f}  [{current:>7d}/{len(data_loader_train.dataset):>7d}]")
 
         
-        evaluate(model, data_loader_val, compareModel, device)
-        if (t+1) % 1 == 0:
-            demo(model, compareModel, epsilon, device)
+        evaluate(model, data_loader_val, compareModel, loss_fn, device)
+        # if (t+1) % 10 == 0:
+        #     demo(model, compareModel, epsilon, device)
         
 
 
 if __name__ == "__main__":
-    trainUNet(10, 0)
+    trainUNet(40, 40)
