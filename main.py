@@ -1,11 +1,20 @@
-from train import trainUNet
+import torch
 
-from gtsrb_utils import load_gtsrb_dataset
+from tqdm import tqdm
+
+from gtsrb_utils import load_gtsrb_dataset, load_gtsrb_dataloader, load_pretrained
 
 
 if __name__ == "__main__":
-    # trainUNet(10, 0)
 
-    dataset = load_gtsrb_dataset(split="train", normalize=False)
-    img, label = dataset[0]
-    print(f"({img.min(), img.max()})")
+    dataloader = load_gtsrb_dataloader(split="test")
+    model = load_pretrained().to("cuda")
+    acc = 0
+    for X, y in tqdm(dataloader, total=len(dataloader)):
+        X, y = X.to("cuda"), y.to("cuda")
+        pred = model(X).argmax(dim=-1)
+
+        acc += torch.count_nonzero(y == pred)
+    acc = acc / len(dataloader.dataset)
+
+    print(f"accuracy: {acc.item()}")
