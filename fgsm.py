@@ -51,7 +51,7 @@ def test( model, device, test_loader, epsilon ):
         # If the initial prediction is wrong, don't bother attacking, just move on
         # if init_pred.item() != target.item():
         #     continue
-        # y_true.append(target.item())
+        y_true.extend(target.tolist())
 
         # Calculate the loss
         loss = F.nll_loss(output, target)
@@ -72,26 +72,31 @@ def test( model, device, test_loader, epsilon ):
 
         # Check for success
         final_pred = output.max(dim=-1, keepdim=True)[1] # get the index of the max log-probability
-        # y_pred.append(final_pred.item())
+        correct += torch.count_nonzero(torch.tensor(init_pred.tolist()) == torch.tensor(final_pred.tolist()))
+        y_pred.extend(final_pred.tolist())
         # if final_pred.item() == target.item():
         #     correct += 1
         #     # Special case for saving 0 epsilon examples
-        #     if (epsilon == 0) and (len(adv_examples) < 5):
-        #         adv_ex = perturbed_data.squeeze().detach().cpu().numpy()
-        #         adv_examples.append( (init_pred.item(), final_pred.item(), adv_ex) )
-        # else:
-        #     # Save some adv examples for visualization later
-        #     if len(adv_examples) < 5:
-        #         adv_ex = perturbed_data.squeeze().detach().cpu().numpy()
-        #         adv_examples.append( (init_pred.item(), final_pred.item(), adv_ex) )
+        if (epsilon == 0) and (len(adv_examples) < 5):
+                # print(perturbed_data[0].unsqueeze(0).shape)
+                adv_ex = perturbed_data[0].squeeze().detach().cpu().numpy()
+                adv_ex = np.einsum('kij->ijk',adv_ex)
+                adv_examples.append( (init_pred.squeeze().tolist()[0], final_pred.squeeze().tolist()[0], adv_ex) )
+        else:
+            # Save some adv examples for visualization later
+            if len(adv_examples) < 5:
+                adv_ex = perturbed_data[0].squeeze().detach().cpu().numpy()
+                adv_ex = np.einsum('kij->ijk', adv_ex)
+                adv_examples.append( (init_pred.squeeze().tolist()[0], final_pred.squeeze().tolist()[0], adv_ex) )
 
     f1_score = metrics.f1_score(y_true, y_pred, average='macro')
     precision = metrics.precision_score(y_true, y_pred, average='macro')
     recall = metrics.recall_score(y_true, y_pred, average='macro')
     mcc = metrics.matthews_corrcoef(y_true, y_pred)
     # Calculate final accuracy for this epsilon
-    final_acc = correct/float(len(test_loader))
-    print("Epsilon: {}\tTest Accuracy = {} / {} = {}".format(epsilon, correct, len(test_loader), final_acc))
+    # final_acc = metrics.accuracy_score(y_true, y_pred)
+    final_acc = correct/len(test_loader.dataset)
+    print("Epsilon: {}\tTest Accuracy = {} / {} = {}".format(epsilon, correct, len(test_loader.dataset), final_acc))
 
     # Return the accuracy and an adversarial example
     return final_acc, f1_score, precision, recall, mcc, adv_examples
@@ -143,3 +148,19 @@ if __name__ == "__main__":
     plt.legend()
     plt.show()
 
+    # Plot several examples of adversarial samples at each epsilon
+    cnt = 0
+    plt.figure(figsize=(8, 10))
+    for i in range(len(epsilons)):
+        for j in range(len(examples[i])):
+            cnt += 1
+            plt.subplot(len(epsilons), len(examples[0]), cnt)
+            plt.xticks([], [])
+            plt.yticks([], [])
+            if j == 0:
+                plt.ylabel("Eps: {}".format(epsilons[i]), fontsize=14)
+            orig, adv, ex = examples[i][j]
+            plt.title("{} -> {}".format(orig, adv))
+            plt.imshow(ex)
+    plt.tight_layout()
+    plt.show()
