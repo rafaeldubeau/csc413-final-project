@@ -31,22 +31,36 @@ def UNetLoss_simple(originalImage, newImage, gtLabel, adversaryNetwork, beta=0.1
 
     return L
 
+def ImageLoss(originalImage, newImage):
+    difference = torch.abs(originalImage - newImage)
+    # Now we have pixel-wise difference between the two images. 
+    gamma = 10
+    # We will find the mean of the top gamma values and take that as the loss.
+    values, _ = difference.topk(gamma, dim=-1)
+    mean = torch.mean(values)
+    return mean
+    return nn.functional.mse_loss(originalImage, newImage)
 
 def UNetLoss_baluja(originalImage, newImage, gtLabel, adversaryNetwork, beta=0.5, target=0):
-
-    
     with torch.no_grad():
         # Compute reranking
-        alpha = 5
+        alpha = [5, 4, 3, 2]
         y = nn.functional.softmax(adversaryNetwork(originalImage), dim=-1)
         ymax, max_indices = y.max(dim=-1) # B x 1
         if target == -1:
             values, indices = y.topk(2, dim=-1) # B x 2
-            t = indices[:, 1] # B x 1 of indices
+            t2 = indices[:, 1] # B x 1 of indices -- indicates the one with the second-highest probability.
+            t3 = indices[:, 2] # B x 1 of indices -- indicates the one with the third-highest probability.
+            t4 = indices[:, 2] # B x 1 of indices -- indicates the one with the fourth-highest probability.
+            t5 = indices[:, 2] # B x 1 of indices -- indicates the one with the fifth-highest probability.
         else:
-            t = target
-
-        y[:, t] = alpha * ymax # This might break
+            t2 = target
+        
+        y[:, t2] = alpha[0] * ymax # This might break
+        if target == -1:
+            y[:, t3] = alpha[1] * ymax
+            y[:, t4] = alpha[2] * ymax
+            y[:, t5] = alpha[3] * ymax
         # print(y[0])
         y_prime = nn.functional.softmax(y, dim=-1)
 
@@ -54,15 +68,12 @@ def UNetLoss_baluja(originalImage, newImage, gtLabel, adversaryNetwork, beta=0.5
     y = nn.functional.softmax(adversaryNetwork(newImage), dim=-1)
 
     # Compute losses
-    L_x = nn.functional.mse_loss(originalImage, newImage) # TODO: maybe we need to change this to before normalization
+    L_x = ImageLoss(originalImage, newImage) # TODO: maybe we need to change this to before normalization
     L_y = nn.functional.mse_loss(y, y_prime)
 
     L = beta * L_x + L_y
 
     return L
-
-
-
 
 def evaluate(model, data, adversaryNetwork, device, target=0):
     if model.training:
@@ -89,6 +100,7 @@ def evaluate(model, data, adversaryNetwork, device, target=0):
     target_acc = target_acc / len(data.dataset)
 
     print(f"Target Accuracy: {target_acc}, Ranking Accuracy: {ranking_acc}")
+    return target_acc
 
 
 def demo(model, adversary, epsilon, device):
@@ -153,7 +165,7 @@ def demo(model, adversary, epsilon, device):
 
 def noisify(originalImage, generatedImage, epsilon): 
     return gtsrb_utils.just_normalize(generatedImage)
-    # normalized = nn.functional.tanh(generatedImage)
+    # normalized = nn.functional.tanh(gtsrb_utils.just_normalize(generatedImage))
     # return originalImage + epsilon * normalized
 
 def trainUNet(epochs: int, starting_epoch: int):
@@ -161,9 +173,13 @@ def trainUNet(epochs: int, starting_epoch: int):
     learning_rate = 10e-4
     batch_size = 128
     alpha = 10e-6
-    epsilon = 0.5 # Max influence the noise can have in the generated image
-    beta = 0.1 # How much influence image closeness has on total loss
+    epsilon = 0.3 # Max influence the noise can have in the generated image
+    beta = 0.4 # How much influence image closeness has on total loss
     target = 0
+
+    # For measuring stats, measured per epoch
+    train_losses = []
+    validation_losses = []
 
     # Load model and set weights
     compareModel = gtsrb_utils.load_pretrained().to(device)
@@ -176,11 +192,19 @@ def trainUNet(epochs: int, starting_epoch: int):
     print("Length:", len(total_dataset))
 
     # Load Datasets
-    train_size = int(len(total_dataset) * 0.85)
+    train_size = int(len(total_dataset) * 0.6)
     val_size = int(len(total_dataset) * 0.15)
-    train_set, val_set = torch.utils.data.random_split(total_dataset, (train_size, val_size))
+    train_set, val_set = torch.utils.data.random_split(total_dataset, 
+                                (train_size, val_size)) 
+    # For testing -- faster processing with a smaller training dataset
+    # train_set, _, val_set = torch.utils.data.random_split(total_dataset, 
+    #                             (int(len(total_dataset) * 0.4), int(len(total_dataset) * 0.3), int(len(total_dataset) * 0.3)))
     data_loader_train = DataLoader(train_set, shuffle=True, batch_size=batch_size)
     data_loader_val = DataLoader(val_set, shuffle=True, batch_size=batch_size)
+
+    # Load weights, if starting_epochs is above 1
+    if starting_epoch > 0:
+        model.load_state_dict(torch.load(os.path.join("data", "models", f"UNetTrain_{starting_epoch}.pth")))
 
     # Loss functions
     loss_fn = UNetLoss_baluja
@@ -215,14 +239,22 @@ def trainUNet(epochs: int, starting_epoch: int):
             loss.backward()
             optimizer.step()
 
-            if batch % 25 == 0:
+            if batch % 10 == 0:
                 loss, current = loss.item(), batch * len(X)
                 print(f"train loss: {loss:>7f}  [{current:>7d}/{len(data_loader_train.dataset):>7d}]")
 
+        validate_loss = evaluate(model, data_loader_val, compareModel, device)
+        train_losses.append(loss.item())
+        validation_losses.append(validate_loss)
         
-        evaluate(model, data_loader_val, compareModel, device)
-        if (t+1) % 1 == 0:
-            demo(model, compareModel, epsilon, device)
+        # if (t+1) % 1 == 0:
+            # demo(model, compareModel, epsilon, device)
+        
+    for i in range(epochs):
+        plt.plot(range(epochs), train_losses, label="Train Loss", linestyle="-.")
+        plt.plot(range(epochs), validation_losses, label="Validation Loss", linestyle=".")
+    plt.legend()
+    plt.show()
         
 
 
