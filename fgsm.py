@@ -7,16 +7,10 @@ from torchvision import datasets, transforms
 from torch.utils.data import Dataset, DataLoader
 from sklearn import metrics
 import numpy as np
+import matplotlib
+matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
-
-
 import gtsrb_utils
-
-# from six.moves import urllib
-# opener = urllib.request.build_opener()
-# opener.addheaders = [('User-agent', 'Mozilla/5.0')]
-# urllib.request.install_opener(opener)
-
 
 
 # FGSM attack code
@@ -26,7 +20,7 @@ def fgsm_attack(image, epsilon):
     # Create the perturbed image by adjusting each pixel of the input image
     perturbed_image = image + epsilon*sign_data_grad
     # Adding clipping to maintain [0,1] range
-    perturbed_image = torch.clamp(perturbed_image, 0, 1)
+    # perturbed_image = torch.clamp(perturbed_image, 0, 1)
     # Return the perturbed image
     return perturbed_image
 
@@ -43,7 +37,6 @@ def test( model, device, test_loader, epsilon ):
         data, target = data.to(device), target.to(device)
 
         data.requires_grad = True
-        print(data.shape)
         # Forward pass the data through the model
         output = F.log_softmax(model(data), dim=-1)
         init_pred = output.max(dim=-1, keepdim=True)[1] # get the index of the max log-probability
@@ -72,29 +65,20 @@ def test( model, device, test_loader, epsilon ):
 
         # Check for success
         final_pred = output.max(dim=-1, keepdim=True)[1] # get the index of the max log-probability
-        correct += torch.count_nonzero(torch.tensor(init_pred.tolist()) == torch.tensor(final_pred.tolist()))
+        correct += torch.count_nonzero(torch.tensor(target.tolist()) == torch.tensor(final_pred.squeeze().tolist()))
+
         y_pred.extend(final_pred.tolist())
-        # if final_pred.item() == target.item():
-        #     correct += 1
-        #     # Special case for saving 0 epsilon examples
-        if (epsilon == 0) and (len(adv_examples) < 5):
-                # print(perturbed_data[0].unsqueeze(0).shape)
-                adv_ex = perturbed_data[0].squeeze().detach().cpu().numpy()
-                adv_ex = np.einsum('kij->ijk',adv_ex)
-                adv_examples.append( (init_pred.squeeze().tolist()[0], final_pred.squeeze().tolist()[0], adv_ex) )
-        else:
-            # Save some adv examples for visualization later
-            if len(adv_examples) < 5:
-                adv_ex = perturbed_data[0].squeeze().detach().cpu().numpy()
-                adv_ex = np.einsum('kij->ijk', adv_ex)
-                adv_examples.append( (init_pred.squeeze().tolist()[0], final_pred.squeeze().tolist()[0], adv_ex) )
+
+        if len(adv_examples) < 5:
+            adv_ex = torch.clamp(perturbed_data[0], 0, 1)
+            adv_ex = adv_ex.squeeze().detach().cpu().numpy()
+            adv_ex = np.einsum('kij->ijk', adv_ex)
+            adv_examples.append( (init_pred.squeeze().tolist()[0], final_pred.squeeze().tolist()[0], adv_ex) )
 
     f1_score = metrics.f1_score(y_true, y_pred, average='macro')
     precision = metrics.precision_score(y_true, y_pred, average='macro')
     recall = metrics.recall_score(y_true, y_pred, average='macro')
     mcc = metrics.matthews_corrcoef(y_true, y_pred)
-    # Calculate final accuracy for this epsilon
-    # final_acc = metrics.accuracy_score(y_true, y_pred)
     final_acc = correct/len(test_loader.dataset)
     print("Epsilon: {}\tTest Accuracy = {} / {} = {}".format(epsilon, correct, len(test_loader.dataset), final_acc))
 
@@ -103,8 +87,8 @@ def test( model, device, test_loader, epsilon ):
 
 
 if __name__ == "__main__":
-    epsilons = [0, .05, .1, .15, .2, .25, .3]
-    # epsilons = [1/(2*(n+1)) for n in range(1000)]
+    epsilons = [0, 0.0001, 0.001, 0.01, 0.05, .1, .15, .2, .25, .3]
+
     accuracies = []
     f1s = []
     precs = []
@@ -121,7 +105,6 @@ if __name__ == "__main__":
     model = gtsrb_utils.load_pretrained().to(device)
 
     test_dataset = gtsrb_utils.load_gtsrb_dataset(split="test", normalize=False)
-    print(len(test_dataset))
     test_loader = DataLoader(test_dataset, shuffle=True, batch_size=512)
 
     # Run test for each epsilon
