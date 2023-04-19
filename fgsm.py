@@ -9,6 +9,8 @@ matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 import gtsrb_utils
 
+from torch import nn, Tensor
+
 
 # FGSM attack code
 def fgsm_attack(image, epsilon):
@@ -16,6 +18,37 @@ def fgsm_attack(image, epsilon):
     perturbed_image = image + epsilon*sign_data_grad
 
     return perturbed_image
+
+
+def fgsm(imgs: Tensor, labels: Tensor, classifier: nn.Module, epsilon: float) -> Tensor:
+    """
+    Runs the Fast Gradient-Sign Method on a batch of data
+    """
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    classifier = classifier.to(device)
+    labels = labels.to(device)
+
+    X = imgs.to(device)
+    X.requires_grad = True
+
+    # Forward pass the data through the classifier model
+    output = F.log_softmax(classifier(X), dim=-1)
+
+    # Compute loss
+    loss = F.nll_loss(output, labels)
+    
+    # Calculate gradients of model in backward pass
+    classifier.zero_grad()
+    loss.backward()
+    data_grad = X.grad.data.detach()
+
+    # Execute FGSM to get a perturbed image
+    sign_data_grad = data_grad.sign()
+    perturbed_image = X + epsilon * sign_data_grad
+
+    classifier.cpu()
+    return perturbed_image.cpu()
 
 
 def test(model, device, test_loader, epsilon ):
