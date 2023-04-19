@@ -43,7 +43,7 @@ def test( model, device, test_loader, epsilon ):
         data, target = data.to(device), target.to(device)
 
         data.requires_grad = True
-
+        print(data.shape)
         # Forward pass the data through the model
         output = F.log_softmax(model(data), dim=-1)
         init_pred = output.max(dim=-1, keepdim=True)[1] # get the index of the max log-probability
@@ -120,7 +120,7 @@ if __name__ == "__main__":
 
     model = gtsrb_utils.load_pretrained().to(device)
 
-    test_dataset = gtsrb_utils.load_gtsrb_dataset(split="test")
+    test_dataset = gtsrb_utils.load_gtsrb_dataset(split="test", normalize=False)
     print(len(test_dataset))
     test_loader = DataLoader(test_dataset, shuffle=True, batch_size=512)
 
