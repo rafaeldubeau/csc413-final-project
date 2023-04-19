@@ -68,7 +68,7 @@ def ImageLossMSE(originalImage, newImage, autoAdjust=True):
     return betaLocal * nn.functional.mse_loss(originalImage, newImage)
 
 def ImageLoss(originalImage, newImage, autoAdjust=True):
-    return ImageLossMSE(originalImage, newImage, autoAdjust=True)
+    return ImageLossPIQA(originalImage, newImage, autoAdjust=True)
 
 def UNetLoss_baluja(originalImage, newImage, gtLabel, adversaryNetwork, beta=0.5, target=-1):
     with torch.no_grad():
@@ -250,6 +250,10 @@ def trainUNet(epochs: int, starting_epoch: int = 0, beta: int=1, trainCycleName=
     # Load weights, if starting_epochs is above 1
     if starting_epoch > 0:
         model.load_state_dict(torch.load(os.path.join("data", f"{trainCycleName}_t{original_target}_{alpha}_{beta}", f"UNetTrain_{trainCycleName}_{starting_epoch}.pth")))
+        dict = pickle.load(open(f"data/{trainCycleName}_t{original_target}_{alpha}_{beta}/statistics.txt", 'rb'))
+        train_losses = dict['train_loss']
+        validation_accs = dict['val_accuracy']
+        ranking_accs = dict['rank_accuracy']
 
     # Loss functions
     loss_fn = UNetLoss_baluja
@@ -318,7 +322,6 @@ def trainUNet(epochs: int, starting_epoch: int = 0, beta: int=1, trainCycleName=
         file1.close
     
     return train_losses, validation_accs, ranking_accs, f"data/{trainCycleName}_t{original_target}_{alpha}_{beta}"
-    # dict = pickle.load(open('Original.txt', 'rb'))
     # # plt.show()
     # return
 
@@ -326,7 +329,7 @@ import matplotlib.patches as mpatches
 import matplotlib.lines as mlines
 
 if __name__ == "__main__":
-    trainCycleName ="BasicMSECopycat" # "MaxSquareError" # "BasicMSE", "GMSDError"
+    trainCycleName ="GMSDErrorCopycat" # "MaxSquareError" # "BasicMSE", "GMSDError"
     
     metrics = []
     colours = ["green", "red", "orange", "yellow", "brown", "black"]
