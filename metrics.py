@@ -104,14 +104,25 @@ def evaluate_Unet(dataloader: DataLoader, use_copycat: bool = False):
     def Unet_method(Unet: UNet):
         return lambda imgs, labels, classifier : Unet(imgs)
     
-    root = os.path.join("data")
-    path_list = [os.path.join(root, "models_t0_3_08", "UnetTrain_80.pth")]
+    image_methods = ["BasicMSE", "GMSDError", "MaxSquareError"]
+    copycat_str = ["", "Copycat"]
+    betas = ["0.5", "1", "5"]
+
+    path_list = []
+    for im in image_methods:
+        for cs in copycat_str:
+            for b in betas:
+                epoch = "30" if cs == "" else "20"
+                path_list.append(
+                    os.path.join("data", f"{im}{cs}_t-1_0.0001_{b}", f"UnetTrain_{im}{cs}_{epoch}.pth")
+                    )
+    
     for path in path_list:
         print(f"Test model at {path}")
         Unet = UNet().eval()
         Unet.load_state_dict(torch.load(path))
         method = Unet_method(Unet)
-        accuracy, f1_score, avg_l2, avg_l2_succ = evaluate_method(method, dataloader, use_copycat=use_copycat)
+        accuracy, f1_score, avg_l2, avg_l2_succ = evaluate_method(method, dataloader, use_copycat=False)
         print(f"model: {path}  -  accuracy: {accuracy}, f1_score: {f1_score}, avg_l2: {avg_l2}, avg_l2_succ: {avg_l2_succ}")
 
 
@@ -134,10 +145,12 @@ def evaluate_crafting(dataloader: DataLoader, use_copycat: bool = False):
         print(f"Crafting ({theta}, {upsilon}, {allow_stacking})  -  accuracy: {accuracy}, f1_score: {f1_score}, avg_l2: {avg_l2}, avg_l2_succ: {avg_l2_succ}")
 
 
+def final_Unet_eval():
+    dataset = load_gtsrb_dataset(split="test", normalize=True)
+    dataloader = DataLoader(dataset, batch_size=128, shuffle=True)
+
+    evaluate_Unet(dataloader, use_copycat=False)
+
 
 if __name__ == "__main__":
-    dataset = load_gtsrb_dataset(split="test", normalize=False)
-    # _, dataset = random_split(dataset, (len(dataset)-10, 10))
-    dataloader = DataLoader(dataset, batch_size=64, shuffle=True)
-
-    evaluate_fgsm(dataloader, use_copycat=False)
+    final_Unet_eval()

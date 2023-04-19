@@ -52,12 +52,6 @@ def compute_adversarial_saliency_map(J: Tensor, t: int, Gamma: BoolTensor, alt=F
     return S
 
 
-# def compute_untargeted_adversarial_saliency_map(J: Tensor, y: int, Gamma: BoolTensor):
-#     Sigma = J.sum(dim=0) - J[y]
-#     mask = torch.logical_and(torch.logical_and(J[y] < 0, Sigma > 0), Gamma)
-#     S = torch.where(mask, J[y].abs()*Sigma, 0.0)
-#     return S
-
 def compute_alt_adversarial_saliency_map(J: Tensor, t: int, Gamma: BoolTensor):
     Sigma = J.sum(dim=0) - J[t]
     mask = torch.logical_and(torch.logical_and(J[t] < 0, Sigma > 0), Gamma)
