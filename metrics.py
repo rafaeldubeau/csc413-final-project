@@ -92,7 +92,7 @@ def evaluate_fgsm(dataloader: DataLoader, use_copycat: bool = False):
     def fgsm_method(epsilon: float):
         return lambda imgs, labels, classifier : just_normalize(fgsm(imgs, labels, classifier, epsilon))
 
-    eps_list = [0.01, 0.05, 0.1, 0.2, 0.3]
+    eps_list = [0.01, 0.05, 0.1, 0.2]
     for eps in eps_list:
         print(f"Testing epsilon = {eps}")
         method = fgsm_method(eps)
