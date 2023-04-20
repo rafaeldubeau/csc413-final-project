@@ -19,11 +19,11 @@ from gtsrb_utils import load_gtsrb_dataloader, load_pretrained, data_transforms
 class InferrenceDataset(Dataset):
     def __init__(self, split="train"):
         data_file = os.path.join("data", f"inferred_labels_{split}.pt")
-        
+
         # Load GTSRB Dataset
         path = os.path.join("data")
         self.gtsrb = torchvision.datasets.GTSRB(root=path, download=True, transform=data_transforms, split=split)
-        
+
 
         if os.path.exists(data_file):
             self.probs = torch.load(data_file).long()
@@ -37,25 +37,25 @@ class InferrenceDataset(Dataset):
             # Load pretrained model
             pretrained = load_pretrained().to(device)
             pretrained.eval()
-            
+
             # Run the pretrained model on the entire dataset
             self.probs = torch.zeros(len(self.gtsrb)).long()
             self.probs.requires_grad = False
             for batch_num, (imgs, _) in tqdm(enumerate(gtsrb_loader), total=len(gtsrb_loader)):
                 imgs = imgs.to(device)
                 pred_probs = pretrained(imgs).detach().cpu()
-                
+
                 self.probs[batch_size * batch_num: batch_size * (batch_num + 1)] = pred_probs.argmax(dim=-1)
-            
+
             # Save the resulting labels
             torch.save(self.probs, data_file)
-    
+
     def __len__(self):
         return len(self.gtsrb)
 
     def __getitem__(self, idx):
         return self.gtsrb[idx][0], self.probs[idx]
-        
+
 
 
 
@@ -71,7 +71,7 @@ def train_epoch(model, data, optimizer, loss_fn, device):
 
     Returns:
         Nothing
-    
+
     """
     if not model.training:
         model.train()
@@ -101,9 +101,9 @@ def evaluate(model, data, loss_fn, device):
             X, y = X.to(device), y.to(device)
             pred = model(X)
             loss += loss_fn(pred, y).item()
-            
+
             acc += torch.count_nonzero(y == pred.argmax(dim=-1))
-    
+
     loss = loss / (len(data.dataset) / batch_size)
     acc = acc / len(data.dataset)
 
@@ -113,7 +113,10 @@ def evaluate(model, data, loss_fn, device):
 def load_copycat(epoch=10) -> ConvClassifier:
     path = os.path.join("data", f"copycat_{epoch}.pth")
     copycat =  ConvClassifier(3, 43)
-    copycat.load_state_dict(torch.load(path))
+    if torch.cuda.is_available():
+        copycat.load_state_dict(torch.load(path))
+    else:
+        copycat.load_state_dict(torch.load(path, map_location=torch.device('cpu')))
 
     copycat = copycat.eval()
 
@@ -131,11 +134,11 @@ if __name__ == "__main__":
     weight_decay = 1e-2
 
     # Load Dataset
-    
+
     train_dataset = InferrenceDataset()
     train_size = int(len(train_dataset) * 0.85)
     val_size = int(len(train_dataset) * 0.15)
-    train_set, val_set = torch.utils.data.random_split(train_dataset, (train_size, val_size)) 
+    train_set, val_set = torch.utils.data.random_split(train_dataset, (train_size, val_size))
     train_dataloader = DataLoader(train_set, batch_size=batch_size, shuffle=True)
     val_dataloader = DataLoader(val_set, batch_size=batch_size, shuffle=True)
 
@@ -159,4 +162,4 @@ if __name__ == "__main__":
 
 
 
-    
+
