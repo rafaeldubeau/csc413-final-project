@@ -19,8 +19,8 @@ from saliency import CraftingAlg_untargeted
 
 
 def get_batch_metrics(original_imgs: Tensor, original_labels: Tensor, X: Tensor, y: Tensor):
-    
-    # Compute accuracy 
+
+    # Compute accuracy
     accuracy = torch.count_nonzero(y == original_labels).item()
 
     original_imgs = original_imgs.flatten(start_dim=1)
@@ -42,7 +42,7 @@ def evaluate_method(method, dataloader: DataLoader, use_copycat: bool = False):
     avg_l2 = 0
     avg_l2_succ = 0
     num_succ = 0
-    
+
     label_all = None
     y_all = None
 
@@ -69,13 +69,13 @@ def evaluate_method(method, dataloader: DataLoader, use_copycat: bool = False):
             y_all = labels
         else:
             y_all = torch.cat((y_all, y), dim=0)
-        
+
 
         accuracy += metrics[0]
         avg_l2 += metrics[1]
         avg_l2_succ += metrics[2]
         num_succ += metrics[3]
-    
+
     accuracy = accuracy / len(dataloader.dataset)
     avg_l2 = avg_l2 / len(dataloader.dataset)
     if num_succ > 0:
@@ -91,8 +91,8 @@ def evaluate_method(method, dataloader: DataLoader, use_copycat: bool = False):
 def evaluate_fgsm(dataloader: DataLoader, use_copycat: bool = False):
     def fgsm_method(epsilon: float):
         return lambda imgs, labels, classifier : just_normalize(fgsm(imgs, labels, classifier, epsilon))
-    
-    eps_list = [0.05, 0.1, 0.2, 0.3]
+
+    eps_list = [0.01, 0.05, 0.1, 0.2, 0.3]
     for eps in eps_list:
         print(f"Testing epsilon = {eps}")
         method = fgsm_method(eps)
@@ -103,7 +103,7 @@ def evaluate_fgsm(dataloader: DataLoader, use_copycat: bool = False):
 def evaluate_Unet(dataloader: DataLoader, use_copycat: bool = False):
     def Unet_method(Unet: UNet):
         return lambda imgs, labels, classifier : Unet(imgs)
-    
+
     image_methods = ["BasicMSE", "GMSDError", "MaxSquareError"]
     copycat_str = ["", "Copycat"]
     betas = ["0.5", "1", "5"]
@@ -116,7 +116,7 @@ def evaluate_Unet(dataloader: DataLoader, use_copycat: bool = False):
                 path_list.append(
                     os.path.join("data", f"{im}{cs}_t-1_0.0001_{b}", f"UnetTrain_{im}{cs}_{epoch}.pth")
                     )
-    
+
     for path in path_list:
         print(f"Test model at {path}")
         Unet = UNet().eval()
@@ -133,7 +133,7 @@ def evaluate_crafting(dataloader: DataLoader, use_copycat: bool = False):
         return lambda imgs, labels, classifier : just_normalize(
                 CraftingAlg_untargeted(imgs.squeeze(), classifier, theta, allow_stacking, upsilon)[0]
             ).unsqueeze(0)
-    
+
     theta_list = [0.5]
     upsilon_list = [10]
     stacking_list = [True]
@@ -146,7 +146,7 @@ def evaluate_crafting(dataloader: DataLoader, use_copycat: bool = False):
 
 
 def final_fgsm_eval():
-    dataset = load_gtsrb_dataset(split="test", normalize=True)
+    dataset = load_gtsrb_dataset(split="test", normalize=False)
     dataloader = DataLoader(dataset, batch_size=64, shuffle=True)
 
     print("---------------Using Pretrained Model------")
